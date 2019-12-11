@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Threading;
 using Unreal_Binary_Builder.Properties;
 
@@ -15,7 +14,7 @@ namespace Unreal_Binary_Builder
     /// </summary>
     public partial class MainWindow : Window
     {
-        private static readonly string PRODUCT_VERSION = "2.2";
+        private static readonly string PRODUCT_VERSION = "2.4";
 
         private static readonly string AUTOMATION_TOOL_NAME = "AutomationToolLauncher";
         private static readonly string DEFAULT_BUILD_XML_FILE = "Engine/Build/InstalledEngineBuild.xml";
@@ -33,6 +32,9 @@ namespace Unreal_Binary_Builder
 
         private string LogMessage = "";
 
+		private string FinalBuildPath = "";
+		private PostBuildSettings postBuildSettings = new PostBuildSettings();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -43,6 +45,8 @@ namespace Unreal_Binary_Builder
             {
                 BuildRocketUE.IsEnabled = true;
             }
+
+			EngineVersionSelection.SelectedIndex = Settings.Default.EngineSelection;
 
             bHostPlatformOnly.IsChecked = Settings.Default.SettingHostPlatformOnly;
             bWithWin64.IsChecked = Settings.Default.bWithWin64;
@@ -97,13 +101,20 @@ namespace Unreal_Binary_Builder
 
                 if (bIsError == false)
                 {
+                    const string StepPattern = @"\*{6} \[(\d*)\/(\d*)\]";
                     const string WarningPattern = @"warning|\*\*\* Unable to determine ";
                     const string DebugPattern = @".+\*\s\D\d\D\d\D\s\w+|.+\*\sFor\sUE4";
                     const string ErrorPattern = @"Error_Unknown|ERROR|exited with code 1";
 
+                    Regex StepRgx = new Regex(StepPattern, RegexOptions.IgnoreCase);
                     Regex WarningRgx = new Regex(WarningPattern, RegexOptions.IgnoreCase);
                     Regex DebugRgx = new Regex(DebugPattern, RegexOptions.IgnoreCase);
                     Regex ErrorRgx = new Regex(ErrorPattern, RegexOptions.IgnoreCase);
+                    if (StepRgx.IsMatch(InMessage))
+                    {
+                        var captures = StepRgx.Match(InMessage).Captures;
+                        ChangeStepLabel(captures[0].Value, captures[1].Value);
+                    }
                     if (WarningRgx.IsMatch(InMessage))
                     {
                         NumWarnings++;
@@ -134,7 +145,10 @@ namespace Unreal_Binary_Builder
         {
             StatusLabel.Content = string.Format("Status: {0}", InStatus);
         }
-
+        private void ChangeStepLabel(string current, string total)
+        {
+            StepLabel.Content = $"Step: [{current}/{total}]";
+        }
         private string GetConditionalString(bool? bCondition)
         {
             return (bool)bCondition ? "true" : "false";
@@ -144,6 +158,7 @@ namespace Unreal_Binary_Builder
         {
             Settings.Default.AutomationPath = AutomationExePath;
 
+			Settings.Default.EngineSelection = EngineVersionSelection.SelectedIndex;
             Settings.Default.SettingHostPlatformOnly = (bool)bHostPlatformOnly.IsChecked;
             Settings.Default.bWithWin64 = (bool)bWithWin64.IsChecked;
             Settings.Default.bWithWin32 = (bool)bWithWin32.IsChecked;
@@ -227,11 +242,10 @@ namespace Unreal_Binary_Builder
             AddLogEntry("==========================BUILD FINISHED==========================");
             AddLogEntry(string.Format("Took {0:hh\\:mm\\:ss}", StopwatchTimer.Elapsed));
             AddLogEntry(string.Format("Build ended at {0}", DateTime.Now.ToString("dddd, dd MMMM yyyy HH:mm:ss")));
-            WriteToLogFile();
             StopwatchTimer.Reset();
             Dispatcher.Invoke(() =>
             {
-                TryShutdown();
+				OnBuildFinished(bLastBuildSuccess);
             });
         }
 
@@ -241,7 +255,24 @@ namespace Unreal_Binary_Builder
             File.WriteAllText(LogFile, LogMessage);
         }
 
-        private void TryShutdown()
+		private void OnBuildFinished(bool bBuildSucess)
+		{
+			if (bBuildSucess)
+			{
+				if (postBuildSettings.CanSaveToZip())
+				{
+					postBuildSettings.SaveToZip(this, FinalBuildPath, postBuildSettings.ZipPath.Text, postBuildSettings.ZipFileName.Text);
+					AddLogEntry("Saving zip file to " + postBuildSettings.ZipPath.Text);
+					WriteToLogFile();
+					return;
+				}
+			}
+
+			WriteToLogFile();
+			TryShutdown();
+		}
+
+        public void TryShutdown()
         {
             if (bShutdownWindows.IsChecked == true)
             {
@@ -276,12 +307,13 @@ namespace Unreal_Binary_Builder
             if (NewFileDialog.ShowDialog() == true)
             {
                 AutomationExePath = NewFileDialog.FileName;
-                AutomationToolPath.Text = AutomationExePath;
+                AutomationToolPath.Text = AutomationExePath;				
                 if (Path.GetFileNameWithoutExtension(AutomationExePath) == AUTOMATION_TOOL_NAME)
                 {
                     BuildRocketUE.IsEnabled = true;
                     ChangeStatusLabel("Idle.");
-                }
+					FinalBuildPath = Path.GetFullPath(AutomationExePath).Replace(@"\Engine\Binaries\DotNET", @"\LocalBuilds\Engine").Replace(Path.GetFileName(AutomationExePath), "");
+				}
                 else
                 {
                     ChangeStatusLabel("Error. Invalid automation tool file selected.");
@@ -327,7 +359,19 @@ namespace Unreal_Binary_Builder
                 return;
             }
 
+			if (EngineVersionSelection.SelectedIndex == 0)
+			{
+				MessageBox.Show("Please select your Engine version to build. If you are unsure about the version number look into the following file:\n\n/Engine/Source/Runtime/Launch/Resources/Version.h\n\nAnd check ENGINE_MAJOR_VERSION and ENGINE_MINOR_VERSION.", "Select Engine Version.", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+				return;
+			}
+
             ChangeStatusLabel("Preparing to build...");
+
+			if (postBuildSettings.ShouldSaveToZip() && postBuildSettings.DirectoryIsWritable() == false)
+			{
+				MessageBox.Show(string.Format("You chose to save Engine build as a zip file but below directory is either not available or not writable.\n\n{0}", postBuildSettings.ZipPath.Text), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+				return;
+			}
 
             if (CustomBuildXMLFile.Text != DEFAULT_BUILD_XML_FILE)
             {
@@ -345,6 +389,12 @@ namespace Unreal_Binary_Builder
                     return;
                 }
             }
+
+			if (SupportHTML5() == false && bWithHTML5.IsChecked == true)
+			{
+				bWithHTML5.IsChecked = false;
+				MessageBox.Show("HTML5 support was removed from Unreal Engine 4.24 and higher. You had it enabled but since it is of no use, I disabled it.");
+			}
 
             if (MessageBox.Show("You are going to build a binary version of Unreal Engine 4. This is a long process and might take time to finish. Are you sure you want to continue? ", "Build Binary Version", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
@@ -398,22 +448,40 @@ namespace Unreal_Binary_Builder
                 }
                 else
                 {
-                    CommandLineArgs += string.Format(" -set:WithWin64={0} -set:WithWin32={1} -set:WithMac={2} -set:WithAndroid={3} -set:WithIOS={4} -set:WithTVOS={5} -set:WithLinux={6} -set:WithHTML5={7} -set:WithSwitch={8} -set:WithPS4={9} -set:WithXboxOne={10} -set:WithLumin={11}",
-                        GetConditionalString(bWithWin64.IsChecked),
-                        GetConditionalString(bWithWin32.IsChecked),
-                        GetConditionalString(bWithMac.IsChecked),
-                        GetConditionalString(bWithAndroid.IsChecked),
-                        GetConditionalString(bWithIOS.IsChecked),
-                        GetConditionalString(bWithTVOS.IsChecked),
-                        GetConditionalString(bWithLinux.IsChecked),
-                        GetConditionalString(bWithHTML5.IsChecked),
-                        GetConditionalString(bWithSwitch.IsChecked),
-                        GetConditionalString(bWithPS4.IsChecked),
-                        GetConditionalString(bWithXboxOne.IsChecked),
-                        GetConditionalString(bWithLumin.IsChecked));
+                    if (SupportHTML5())
+					{
+						CommandLineArgs += string.Format(" -set:WithWin64={0} -set:WithWin32={1} -set:WithMac={2} -set:WithAndroid={3} -set:WithIOS={4} -set:WithTVOS={5} -set:WithLinux={6} -set:WithHTML5={7} -set:WithSwitch={8} -set:WithPS4={9} -set:WithXboxOne={10} -set:WithLumin={11}",
+						GetConditionalString(bWithWin64.IsChecked),
+						GetConditionalString(bWithWin32.IsChecked),
+						GetConditionalString(bWithMac.IsChecked),
+						GetConditionalString(bWithAndroid.IsChecked),
+						GetConditionalString(bWithIOS.IsChecked),
+						GetConditionalString(bWithTVOS.IsChecked),
+						GetConditionalString(bWithLinux.IsChecked),
+						GetConditionalString(bWithHTML5.IsChecked),
+						GetConditionalString(bWithSwitch.IsChecked),
+						GetConditionalString(bWithPS4.IsChecked),
+						GetConditionalString(bWithXboxOne.IsChecked),
+						GetConditionalString(bWithLumin.IsChecked));
+					}
+					else
+					{
+						CommandLineArgs += string.Format(" -set:WithWin64={0} -set:WithWin32={1} -set:WithMac={2} -set:WithAndroid={3} -set:WithIOS={4} -set:WithTVOS={5} -set:WithLinux={6} -set:WithSwitch={7} -set:WithPS4={8} -set:WithXboxOne={9} -set:WithLumin={10}",
+						GetConditionalString(bWithWin64.IsChecked),
+						GetConditionalString(bWithWin32.IsChecked),
+						GetConditionalString(bWithMac.IsChecked),
+						GetConditionalString(bWithAndroid.IsChecked),
+						GetConditionalString(bWithIOS.IsChecked),
+						GetConditionalString(bWithTVOS.IsChecked),
+						GetConditionalString(bWithLinux.IsChecked),
+						GetConditionalString(bWithSwitch.IsChecked),
+						GetConditionalString(bWithPS4.IsChecked),
+						GetConditionalString(bWithXboxOne.IsChecked),
+						GetConditionalString(bWithLumin.IsChecked));
+					}
                 }
 
-				if (EngineVersionSelection.SelectedIndex > 0)
+				if (EngineVersionSelection.SelectedIndex > 1)
 				{
 					CommandLineArgs += string.Format(" -set:WithServer={0} -set:WithClient={1} -set:WithHoloLens={2}", 
 						GetConditionalString(bWithServer.IsChecked), 
@@ -481,5 +549,22 @@ namespace Unreal_Binary_Builder
 
             SaveAllSettings();
         }
+
+		private void PostBuildSettings_Click(object sender, RoutedEventArgs e)
+		{
+			postBuildSettings.Owner = this;
+			postBuildSettings.ShowDialog();
+		}
+
+		private void EngineVersionSelection_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+		{
+			bWithServer.IsEnabled = bWithClient.IsEnabled = bWithServerLabel.IsEnabled = bWithClientLabel.IsEnabled = EngineVersionSelection.SelectedIndex > 1;
+			bWithHTML5.IsEnabled = bWithHTML5Label.IsEnabled = EngineVersionSelection.SelectedIndex < 3;
+		}
+
+		private bool SupportHTML5()
+		{
+			return EngineVersionSelection.SelectedIndex < 3;
+		}
 	}
 }

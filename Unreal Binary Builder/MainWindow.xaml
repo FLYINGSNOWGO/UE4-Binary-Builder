@@ -65,7 +65,7 @@
 					<Label Content ="iOS" Margin="154,42,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="0"/>
 					<ToggleButton x:Name="bWithIOS" Style="{DynamicResource MaterialDesignSwitchToggleButton}" Margin="231,40,0,0" IsEnabled="{Binding IsChecked, Converter={StaticResource NotConverter}, ElementName=bHostPlatformOnly}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
 
-					<Label Content ="HTML5" Margin="154,73,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="0"/>
+					<Label x:Name="bWithHTML5Label" Content ="HTML5" Margin="154,73,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="0"/>
 					<ToggleButton x:Name="bWithHTML5" Style="{DynamicResource MaterialDesignSwitchToggleButton}" Margin="231,73,0,0" IsEnabled="{Binding IsChecked, Converter={StaticResource NotConverter}, ElementName=bHostPlatformOnly}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
 
 					<Label Content ="TvOS" Margin="154,105,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="0"/>
@@ -124,11 +124,11 @@
 					<ToggleButton x:Name="bCleanBuild" Style="{DynamicResource MaterialDesignSwitchToggleButton}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,170,0,0"/>
 					<Label Content="Remove Previous Build" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="45,165,0,0" ToolTip="Cleans any previous builds. Appends -Clean command line."/>
 
-					<ToggleButton x:Name="bWithServer" Style="{DynamicResource MaterialDesignSwitchToggleButton}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="285,11,0,0" IsEnabled="{Binding IsSelected, ElementName=comboBoxItem1}"/>
-					<Label Content="With Server" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="324,5,0,0" ToolTip="Create dedicated server target." IsEnabled="{Binding IsSelected, ElementName=comboBoxItem1}" />
+					<ToggleButton x:Name="bWithServer" Style="{DynamicResource MaterialDesignSwitchToggleButton}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="285,11,0,0"/>
+					<Label x:Name="bWithServerLabel" Content="With Server" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="324,5,0,0" ToolTip="Create dedicated server target."/>
 
-					<ToggleButton x:Name="bWithClient" Style="{DynamicResource MaterialDesignSwitchToggleButton}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="285,43,0,0" IsEnabled="{Binding IsSelected, ElementName=comboBoxItem1}"/>
-					<Label Content="With Client" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="324,37,0,0" ToolTip="Create client target." IsEnabled="{Binding IsSelected, ElementName=comboBoxItem1}"/>
+					<ToggleButton x:Name="bWithClient" Style="{DynamicResource MaterialDesignSwitchToggleButton}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="285,43,0,0"/>
+					<Label x:Name="bWithClientLabel" Content="With Client" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="324,37,0,0" ToolTip="Create client target."/>
 
 					<GroupBox Header="Shutdown Settings"  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="475,6,0,0" Height="178">
 						<Grid>
@@ -143,21 +143,37 @@
 			</GroupBox>
 
 			<Label Content="Select Engine Version" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="0" Margin="10,14,0,0"></Label>
-			<ComboBox x:Name="EngineVersionSelection" SelectedIndex="0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="159,8,0,0" Width="204">
-				<ComboBoxItem x:Name="comboBoxItem" Content="4.22"/>
-				<ComboBoxItem x:Name="comboBoxItem1" Content="4.23 and above"/>
+			<ComboBox x:Name="EngineVersionSelection" SelectedIndex="0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="159,8,0,0" Width="204" SelectionChanged="EngineVersionSelection_SelectionChanged">
+				<ComboBoxItem x:Name="comboBoxItem" Content="None"/>
+				<ComboBoxItem x:Name="comboBoxItem1" Content="4.22"/>
+				<ComboBoxItem x:Name="comboBoxItem2" Content="4.23"/>
+				<ComboBoxItem x:Name="comboBoxItem3" Content="4.24"/>
 			</ComboBox>
 
 			<local:LogViewer x:Name="LogControl" Margin="10,377,7.6,47.4" Height="Auto" Width="Auto"/>
-
-			<Label x:Name="StatusLabel" Content="Status: "  VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="10,0,0,17" Padding="0"/>
+			
+			<Label x:Name="StepLabel" Content="Step: " VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="10,0,0,17" Padding="0"/>
+			<Label x:Name="StatusLabel" Content="Status: " VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="10,0,0,17" Padding="0"/>
+			<Button x:Name="PostBuildSettings" Style="{DynamicResource MaterialDesignFlatButton}" VerticalAlignment="Bottom" HorizontalAlignment="Right" Content="Post-Build Settings" Margin="0,0,100,10" Click="PostBuildSettings_Click" />
 			<Button x:Name="BuildRocketUE" Style="{DynamicResource MaterialDesignFlatButton}" VerticalAlignment="Bottom" HorizontalAlignment="Right" Content="Start Build" Margin="0,0,10,10" Click="BuildRocketUE_Click"/>
 
 			<materialDesign:DialogHost x:Name="AboutDialog" IsOpen="False" CloseOnClickAway="True">
 				<materialDesign:DialogHost.DialogContent>
 					<Grid>
-						<Label x:Name="AboutMessageLabel" Content="A helper application designed to create binary version of Unreal Engine 4 from source.&#xA;&#xA;Created by Satheesh (ryanjon2040)&#xA;&#xA;Updated for 4.18 and PS4/Xbox Support by James Baxter (TheJamsh)&#xA;Updated for 4.21 and Lumin support by KarstenMaxim (AlphaSoftLLC)" />
+						<Label x:Name="AboutMessageLabel" Content="A helper application designed to create binary version of Unreal Engine 4 from source.&#xA;&#xA;Created by Satheesh (ryanjon2040)&#xA;&#xA;Updated for 4.18 and PS4/Xbox Support by James Baxter (TheJamsh)&#xA;Updated for 4.21 and Lumin support by KarstenMaxim (AlphaSoftLLC)&#xA;Step counter added by Ben Vaccaro (freaksed)" />
 						<Button x:Name="AboutBtn_Ok" VerticalAlignment="Bottom" Margin="10,110,10,10" Content="Ok" Click="AboutBtn_Ok_Click"/>
+					</Grid>
+				</materialDesign:DialogHost.DialogContent>
+			</materialDesign:DialogHost>
+
+			<materialDesign:DialogHost x:Name="ZipProgressDialog" IsOpen="False" CloseOnClickAway="False">
+				<materialDesign:DialogHost.DialogContent>
+					<Grid>
+						<Label x:Name="CurrentFileSaving" Content="FileName" Margin="10"/>
+						<Label x:Name="FileSaveState" Content="State" Margin="10 35"/>
+						<Label x:Name="TotalResult" Content="File Size" Margin="10 60"/>
+						<ProgressBar x:Name="FileProgressbar" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Value="20" Width="700" Height="30" Margin="10 10 10 50" IsIndeterminate="True"/>
+						<ProgressBar x:Name="OverallProgressbar" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Value="50.3" Width="700" Height="30" Margin="10 140 10 10" IsIndeterminate="True"/>						
 					</Grid>
 				</materialDesign:DialogHost.DialogContent>
 			</materialDesign:DialogHost>
